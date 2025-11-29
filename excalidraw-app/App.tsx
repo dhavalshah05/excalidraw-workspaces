@@ -145,7 +145,9 @@ import {
   WorkspaceIndicator,
   currentWorkspaceIdAtom,
   currentWorkspaceNameAtom,
+  saveWorkspaceDialogOpenAtom,
 } from "./workspace";
+import { saveWorkspace } from "./data/WorkspaceStorage";
 
 import type { CollabAPI } from "./collab/Collab";
 import type { SavedWorkspace } from "./data/WorkspaceStorage";
@@ -387,8 +389,72 @@ const ExcalidrawWrapper = () => {
   const collabError = useAtomValue(collabErrorIndicatorAtom);
 
   // Workspace management
-  const setCurrentWorkspaceId = useSetAtom(currentWorkspaceIdAtom);
-  const setCurrentWorkspaceName = useSetAtom(currentWorkspaceNameAtom);
+  const [currentWorkspaceId, setCurrentWorkspaceId] = useAtom(
+    currentWorkspaceIdAtom,
+  );
+  const [currentWorkspaceName, setCurrentWorkspaceName] = useAtom(
+    currentWorkspaceNameAtom,
+  );
+  const setSaveDialogOpen = useSetAtom(saveWorkspaceDialogOpenAtom);
+
+  // Handle Cmd+S / Ctrl+S for workspace saving
+  useEffect(() => {
+    const handleKeyDown = async (event: KeyboardEvent) => {
+      if (
+        (event.metaKey || event.ctrlKey) &&
+        event.key.toLowerCase() === "s" &&
+        !event.shiftKey
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+
+        if (!excalidrawAPI) {
+          return;
+        }
+
+        // If workspace already exists, save directly
+        if (currentWorkspaceId && currentWorkspaceName) {
+          try {
+            const elements = excalidrawAPI.getSceneElements();
+            const appState = excalidrawAPI.getAppState();
+            const files = excalidrawAPI.getFiles();
+
+            await saveWorkspace(
+              currentWorkspaceName,
+              elements,
+              appState,
+              files,
+              currentWorkspaceId,
+            );
+
+            excalidrawAPI.setToast({
+              message: `Workspace "${currentWorkspaceName}" saved!`,
+            });
+          } catch (error) {
+            console.error("Failed to save workspace:", error);
+            excalidrawAPI.setToast({
+              message: "Failed to save workspace",
+            });
+          }
+        } else {
+          // New workspace - open save dialog
+          setSaveDialogOpen(true);
+        }
+      }
+    };
+
+    // Use capture phase to intercept before Excalidraw handles it
+    window.addEventListener("keydown", handleKeyDown, { capture: true });
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown, { capture: true });
+    };
+  }, [
+    excalidrawAPI,
+    currentWorkspaceId,
+    currentWorkspaceName,
+    setSaveDialogOpen,
+  ]);
 
   useHandleLibrary({
     excalidrawAPI,

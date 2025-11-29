@@ -125,10 +125,18 @@ export const WorkspaceManager: React.FC<WorkspaceManagerProps> = ({
   }, [onNewWorkspace, setIsOpen]);
 
   const handleExport = useCallback(async () => {
+    const defaultFilename = `excalidraw-workspaces-${new Date().toISOString().split("T")[0]}`;
+    const filename = prompt("Enter filename for export:", defaultFilename);
+
+    // User cancelled
+    if (filename === null) {
+      return;
+    }
+
     setIsExporting(true);
     setImportMessage(null);
     try {
-      await exportAllWorkspaces();
+      await exportAllWorkspaces(filename);
     } catch (err) {
       console.error("Failed to export workspaces:", err);
       alert(

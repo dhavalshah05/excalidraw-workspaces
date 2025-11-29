@@ -322,8 +322,11 @@ const EXPORT_VERSION = 1;
 
 /**
  * Export all workspaces to a JSON file
+ * @param filename - Optional custom filename (without extension)
  */
-export const exportAllWorkspaces = async (): Promise<void> => {
+export const exportAllWorkspaces = async (
+  filename?: string,
+): Promise<void> => {
   const workspaces = await getAllWorkspaces();
 
   if (workspaces.length === 0) {
@@ -340,9 +343,13 @@ export const exportAllWorkspaces = async (): Promise<void> => {
   const blob = new Blob([jsonString], { type: "application/json" });
   const url = URL.createObjectURL(blob);
 
+  // Use provided filename or default
+  const defaultFilename = `excalidraw-workspaces-${new Date().toISOString().split("T")[0]}`;
+  const finalFilename = filename?.trim() || defaultFilename;
+
   const a = document.createElement("a");
   a.href = url;
-  a.download = `excalidraw-workspaces-${new Date().toISOString().split("T")[0]}.json`;
+  a.download = `${finalFilename}.json`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

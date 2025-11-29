@@ -46,6 +46,9 @@ export const WorkspaceManager: React.FC<WorkspaceManagerProps> = ({
   const [isImporting, setIsImporting] = useState(false);
   const [importMessage, setImportMessage] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState<
+    "updated-desc" | "updated-asc" | "name-asc" | "name-desc" | "created-desc" | "created-asc"
+  >("updated-desc");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -73,10 +76,29 @@ export const WorkspaceManager: React.FC<WorkspaceManagerProps> = ({
     }
   }, [isOpen, refreshWorkspaces]);
 
-  // Filter workspaces based on search query
-  const filteredWorkspaces = workspaces.filter((workspace) =>
-    workspace.name.toLowerCase().includes(searchQuery.toLowerCase()),
-  );
+  // Filter and sort workspaces
+  const filteredWorkspaces = workspaces
+    .filter((workspace) =>
+      workspace.name.toLowerCase().includes(searchQuery.toLowerCase()),
+    )
+    .sort((a, b) => {
+      switch (sortBy) {
+        case "updated-desc":
+          return b.updatedAt - a.updatedAt;
+        case "updated-asc":
+          return a.updatedAt - b.updatedAt;
+        case "created-desc":
+          return b.createdAt - a.createdAt;
+        case "created-asc":
+          return a.createdAt - b.createdAt;
+        case "name-asc":
+          return a.name.localeCompare(b.name);
+        case "name-desc":
+          return b.name.localeCompare(a.name);
+        default:
+          return 0;
+      }
+    });
 
   const handleClose = useCallback(() => {
     setIsOpen(false);
@@ -265,25 +287,40 @@ export const WorkspaceManager: React.FC<WorkspaceManagerProps> = ({
         )}
 
         {workspaces.length > 0 && (
-          <div className="WorkspaceManager__search">
-            <input
-              ref={searchInputRef}
-              type="text"
-              className="WorkspaceManager__searchInput"
-              placeholder="Search workspaces..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                className="WorkspaceManager__searchClear"
-                onClick={() => setSearchQuery("")}
-                title="Clear search"
-              >
-                ×
-              </button>
-            )}
+          <div className="WorkspaceManager__toolbar">
+            <div className="WorkspaceManager__search">
+              <input
+                ref={searchInputRef}
+                type="text"
+                className="WorkspaceManager__searchInput"
+                placeholder="Search workspaces..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  className="WorkspaceManager__searchClear"
+                  onClick={() => setSearchQuery("")}
+                  title="Clear search"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+            <select
+              className="WorkspaceManager__sortSelect"
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+              title="Sort workspaces"
+            >
+              <option value="updated-desc">Recently Updated</option>
+              <option value="updated-asc">Oldest Updated</option>
+              <option value="created-desc">Recently Created</option>
+              <option value="created-asc">Oldest Created</option>
+              <option value="name-asc">Name A-Z</option>
+              <option value="name-desc">Name Z-A</option>
+            </select>
           </div>
         )}
 

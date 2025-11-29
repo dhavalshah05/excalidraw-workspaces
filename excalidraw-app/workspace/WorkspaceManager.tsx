@@ -45,7 +45,9 @@ export const WorkspaceManager: React.FC<WorkspaceManagerProps> = ({
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [importMessage, setImportMessage] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const refreshWorkspaces = useCallback(async () => {
     setIsLoading(true);
@@ -63,8 +65,18 @@ export const WorkspaceManager: React.FC<WorkspaceManagerProps> = ({
   useEffect(() => {
     if (isOpen) {
       refreshWorkspaces();
+      setSearchQuery("");
+      // Focus search input after a brief delay
+      setTimeout(() => {
+        searchInputRef.current?.focus();
+      }, 100);
     }
   }, [isOpen, refreshWorkspaces]);
+
+  // Filter workspaces based on search query
+  const filteredWorkspaces = workspaces.filter((workspace) =>
+    workspace.name.toLowerCase().includes(searchQuery.toLowerCase()),
+  );
 
   const handleClose = useCallback(() => {
     setIsOpen(false);
@@ -252,6 +264,29 @@ export const WorkspaceManager: React.FC<WorkspaceManagerProps> = ({
           <div className="WorkspaceManager__importMessage">{importMessage}</div>
         )}
 
+        {workspaces.length > 0 && (
+          <div className="WorkspaceManager__search">
+            <input
+              ref={searchInputRef}
+              type="text"
+              className="WorkspaceManager__searchInput"
+              placeholder="Search workspaces..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                className="WorkspaceManager__searchClear"
+                onClick={() => setSearchQuery("")}
+                title="Clear search"
+              >
+                ×
+              </button>
+            )}
+          </div>
+        )}
+
         {isLoading ? (
           <div className="WorkspaceManager__loading">Loading workspaces...</div>
         ) : workspaces.length === 0 ? (
@@ -268,9 +303,15 @@ export const WorkspaceManager: React.FC<WorkspaceManagerProps> = ({
               Create Your First Workspace
             </button>
           </div>
+        ) : filteredWorkspaces.length === 0 && searchQuery ? (
+          <div className="WorkspaceManager__empty">
+            <div className="WorkspaceManager__emptyIcon">🔍</div>
+            <h3>No workspaces found</h3>
+            <p>No workspaces match "{searchQuery}"</p>
+          </div>
         ) : (
           <div className="WorkspaceManager__grid">
-            {workspaces.map((workspace) => (
+            {filteredWorkspaces.map((workspace) => (
               <div
                 key={workspace.id}
                 className={`WorkspaceManager__card ${

@@ -147,7 +147,13 @@ import {
   currentWorkspaceNameAtom,
   saveWorkspaceDialogOpenAtom,
 } from "./workspace";
-import { saveWorkspace, generateThumbnail } from "./data/WorkspaceStorage";
+import {
+  saveWorkspace,
+  generateThumbnail,
+  setCurrentWorkspaceId as persistCurrentWorkspaceId,
+  clearCurrentWorkspaceId,
+  restoreCurrentWorkspace,
+} from "./data/WorkspaceStorage";
 
 import type { CollabAPI } from "./collab/Collab";
 import type { SavedWorkspace } from "./data/WorkspaceStorage";
@@ -396,6 +402,45 @@ const ExcalidrawWrapper = () => {
     currentWorkspaceNameAtom,
   );
   const setSaveDialogOpen = useSetAtom(saveWorkspaceDialogOpenAtom);
+
+  // Restore current workspace from localStorage on app initialization
+  const workspaceRestoredRef = useRef(false);
+  useEffect(() => {
+    // Only run once when excalidrawAPI becomes available
+    if (!excalidrawAPI || workspaceRestoredRef.current) {
+      return;
+    }
+
+    const restoreWorkspace = async () => {
+      try {
+        const workspace = await restoreCurrentWorkspace();
+        if (workspace) {
+          // Merge workspace appState with current appState defaults
+          const mergedAppState = {
+            ...excalidrawAPI.getAppState(),
+            ...workspace.appState,
+          };
+          excalidrawAPI.updateScene({
+            elements: workspace.elements,
+            appState: mergedAppState,
+            captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+          });
+          if (workspace.files && Object.keys(workspace.files).length > 0) {
+            excalidrawAPI.addFiles(Object.values(workspace.files));
+          }
+          setCurrentWorkspaceId(workspace.id);
+          setCurrentWorkspaceName(workspace.name);
+        }
+      } catch (error) {
+        console.error("Failed to restore workspace:", error);
+        // Clear invalid workspace ID
+        clearCurrentWorkspaceId();
+      }
+    };
+
+    workspaceRestoredRef.current = true;
+    restoreWorkspace();
+  }, [excalidrawAPI, setCurrentWorkspaceId, setCurrentWorkspaceName]);
 
   // Handle Cmd+S / Ctrl+S for workspace saving
   useEffect(() => {
@@ -828,6 +873,8 @@ const ExcalidrawWrapper = () => {
       excalidrawAPI.resetScene();
       setCurrentWorkspaceId(null);
       setCurrentWorkspaceName("");
+      // Clear localStorage so refresh starts with a new workspace
+      clearCurrentWorkspaceId();
     }
   }, [excalidrawAPI, setCurrentWorkspaceId, setCurrentWorkspaceName]);
 
@@ -849,6 +896,8 @@ const ExcalidrawWrapper = () => {
         }
         setCurrentWorkspaceId(workspace.id);
         setCurrentWorkspaceName(workspace.name);
+        // Persist to localStorage so refresh remembers this workspace
+        persistCurrentWorkspaceId(workspace.id);
       }
     },
     [excalidrawAPI, setCurrentWorkspaceId, setCurrentWorkspaceName],

@@ -13,6 +13,7 @@ import {
   saveWorkspace,
   workspaceNameExists,
   generateThumbnail,
+  setCurrentWorkspaceId as persistCurrentWorkspaceId,
 } from "../data/WorkspaceStorage";
 import {
   saveWorkspaceDialogOpenAtom,
@@ -90,6 +91,8 @@ export const SaveWorkspaceDialog: React.FC<SaveWorkspaceDialogProps> = ({
 
       setCurrentId(workspace.id);
       setCurrentName(workspace.name);
+      // Persist to localStorage so refresh remembers this workspace
+      persistCurrentWorkspaceId(workspace.id);
       setIsOpen(false);
 
       if (onSaveSuccess) {

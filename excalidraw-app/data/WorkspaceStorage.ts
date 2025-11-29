@@ -9,6 +9,8 @@ import { getNonDeletedElements } from "@excalidraw/element";
 import { clearAppStateForLocalStorage } from "@excalidraw/excalidraw/appState";
 import { exportToCanvas } from "@excalidraw/utils";
 
+import { STORAGE_KEYS } from "../app_constants";
+
 import type { ExcalidrawElement } from "@excalidraw/element/types";
 import type { AppState, BinaryFiles } from "@excalidraw/excalidraw/types";
 
@@ -102,8 +104,15 @@ export const loadWorkspace = async (
 
 /**
  * Delete a workspace from IndexedDB
+ * Also clears the current workspace ID if we're deleting the current workspace
  */
 export const deleteWorkspace = async (id: string): Promise<void> => {
+  // If we're deleting the currently loaded workspace, clear the stored ID
+  const currentId = getCurrentWorkspaceId();
+  if (currentId === id) {
+    clearCurrentWorkspaceId();
+  }
+
   await del(id, workspacesStore);
 };
 
@@ -200,3 +209,60 @@ export const generateThumbnail = async (
     return undefined;
   }
 };
+
+// ============================================================================
+// Current Workspace Persistence (localStorage)
+// ============================================================================
+
+/**
+ * Save the current workspace ID to localStorage
+ */
+export const setCurrentWorkspaceId = (workspaceId: string | null): void => {
+  if (workspaceId) {
+    localStorage.setItem(
+      STORAGE_KEYS.LOCAL_STORAGE_CURRENT_WORKSPACE_ID,
+      workspaceId,
+    );
+  } else {
+    localStorage.removeItem(STORAGE_KEYS.LOCAL_STORAGE_CURRENT_WORKSPACE_ID);
+  }
+};
+
+/**
+ * Get the current workspace ID from localStorage
+ */
+export const getCurrentWorkspaceId = (): string | null => {
+  return localStorage.getItem(STORAGE_KEYS.LOCAL_STORAGE_CURRENT_WORKSPACE_ID);
+};
+
+/**
+ * Clear the current workspace ID from localStorage
+ */
+export const clearCurrentWorkspaceId = (): void => {
+  localStorage.removeItem(STORAGE_KEYS.LOCAL_STORAGE_CURRENT_WORKSPACE_ID);
+};
+
+/**
+ * Restore the current workspace from localStorage.
+ * Returns the workspace if found, null if not found or if storage is empty.
+ * Also clears the stored ID if the workspace no longer exists (edge case handling).
+ */
+export const restoreCurrentWorkspace =
+  async (): Promise<SavedWorkspace | null> => {
+    const storedId = getCurrentWorkspaceId();
+
+    if (!storedId) {
+      return null;
+    }
+
+    // Try to load the workspace
+    const workspace = await loadWorkspace(storedId);
+
+    if (!workspace) {
+      // Workspace was deleted or doesn't exist anymore - clear the stored ID
+      clearCurrentWorkspaceId();
+      return null;
+    }
+
+    return workspace;
+  };

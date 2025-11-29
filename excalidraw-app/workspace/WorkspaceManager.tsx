@@ -186,7 +186,15 @@ export const WorkspaceManager: React.FC<WorkspaceManagerProps> = ({
                 }}
               >
                 <div className="WorkspaceManager__cardPreview">
-                  <span className="WorkspaceManager__cardIcon">🎨</span>
+                  {workspace.thumbnail ? (
+                    <img
+                      src={workspace.thumbnail}
+                      alt={`Preview of ${workspace.name}`}
+                      className="WorkspaceManager__cardThumbnail"
+                    />
+                  ) : (
+                    <span className="WorkspaceManager__cardIcon">🎨</span>
+                  )}
                 </div>
                 <div className="WorkspaceManager__cardContent">
                   <h4 className="WorkspaceManager__cardTitle">

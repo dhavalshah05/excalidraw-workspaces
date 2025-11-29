@@ -7,9 +7,12 @@ import { createStore, del, entries, get, set } from "idb-keyval";
 
 import { getNonDeletedElements } from "@excalidraw/element";
 import { clearAppStateForLocalStorage } from "@excalidraw/excalidraw/appState";
+import { exportToCanvas } from "@excalidraw/utils";
 
 import type { ExcalidrawElement } from "@excalidraw/element/types";
 import type { AppState, BinaryFiles } from "@excalidraw/excalidraw/types";
+
+const THUMBNAIL_MAX_SIZE = 200; // Max width/height for thumbnail
 
 export interface SavedWorkspace {
   id: string;
@@ -28,6 +31,7 @@ export interface WorkspaceMetadata {
   createdAt: number;
   updatedAt: number;
   elementCount: number;
+  thumbnail?: string; // Base64 encoded thumbnail
 }
 
 const workspacesStore = createStore(
@@ -51,16 +55,19 @@ export const saveWorkspace = async (
   appState: AppState,
   files: BinaryFiles,
   existingId?: string,
+  thumbnail?: string,
 ): Promise<SavedWorkspace> => {
   const id = existingId || generateId();
   const now = Date.now();
 
   // Get existing workspace to preserve createdAt if updating
   let createdAt = now;
+  let existingThumbnail: string | undefined;
   if (existingId) {
     const existing = await get<SavedWorkspace>(existingId, workspacesStore);
     if (existing) {
       createdAt = existing.createdAt;
+      existingThumbnail = existing.thumbnail;
     }
   }
 
@@ -75,6 +82,7 @@ export const saveWorkspace = async (
     files,
     createdAt,
     updatedAt: now,
+    thumbnail: thumbnail || existingThumbnail,
   };
 
   await set(id, workspace, workspacesStore);
@@ -114,6 +122,7 @@ export const getAllWorkspacesMetadata = async (): Promise<
       createdAt: workspace.createdAt,
       updatedAt: workspace.updatedAt,
       elementCount: workspace.elements.length,
+      thumbnail: workspace.thumbnail,
     }))
     .sort((a, b) => b.updatedAt - a.updatedAt); // Most recently updated first
 };
@@ -154,5 +163,40 @@ export const renameWorkspace = async (
     workspace.name = newName;
     workspace.updatedAt = Date.now();
     await set(id, workspace, workspacesStore);
+  }
+};
+
+/**
+ * Generate a thumbnail from canvas elements
+ */
+export const generateThumbnail = async (
+  elements: readonly ExcalidrawElement[],
+  appState: Partial<AppState>,
+  files: BinaryFiles,
+): Promise<string | undefined> => {
+  const nonDeletedElements = getNonDeletedElements(elements);
+
+  if (nonDeletedElements.length === 0) {
+    return undefined;
+  }
+
+  try {
+    const canvas = await exportToCanvas({
+      elements: nonDeletedElements,
+      appState: {
+        ...appState,
+        exportBackground: true,
+        viewBackgroundColor: appState.viewBackgroundColor || "#ffffff",
+      },
+      files,
+      maxWidthOrHeight: THUMBNAIL_MAX_SIZE,
+      exportPadding: 10,
+    });
+
+    // Convert canvas to base64 data URL
+    return canvas.toDataURL("image/png", 0.7);
+  } catch (error) {
+    console.error("Failed to generate thumbnail:", error);
+    return undefined;
   }
 };

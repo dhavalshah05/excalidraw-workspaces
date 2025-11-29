@@ -9,7 +9,11 @@ import { Dialog } from "@excalidraw/excalidraw/components/Dialog";
 
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 
-import { saveWorkspace, workspaceNameExists } from "../data/WorkspaceStorage";
+import {
+  saveWorkspace,
+  workspaceNameExists,
+  generateThumbnail,
+} from "../data/WorkspaceStorage";
 import {
   saveWorkspaceDialogOpenAtom,
   currentWorkspaceIdAtom,
@@ -72,12 +76,16 @@ export const SaveWorkspaceDialog: React.FC<SaveWorkspaceDialogProps> = ({
       const appState = excalidrawAPI.getAppState();
       const files = excalidrawAPI.getFiles();
 
+      // Generate thumbnail
+      const thumbnail = await generateThumbnail(elements, appState, files);
+
       const workspace = await saveWorkspace(
         trimmedName,
         elements,
         appState,
         files,
         currentId || undefined,
+        thumbnail,
       );
 
       setCurrentId(workspace.id);

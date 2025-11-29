@@ -147,7 +147,7 @@ import {
   currentWorkspaceNameAtom,
   saveWorkspaceDialogOpenAtom,
 } from "./workspace";
-import { saveWorkspace } from "./data/WorkspaceStorage";
+import { saveWorkspace, generateThumbnail } from "./data/WorkspaceStorage";
 
 import type { CollabAPI } from "./collab/Collab";
 import type { SavedWorkspace } from "./data/WorkspaceStorage";
@@ -419,12 +419,16 @@ const ExcalidrawWrapper = () => {
             const appState = excalidrawAPI.getAppState();
             const files = excalidrawAPI.getFiles();
 
+            // Generate thumbnail
+            const thumbnail = await generateThumbnail(elements, appState, files);
+
             await saveWorkspace(
               currentWorkspaceName,
               elements,
               appState,
               files,
               currentWorkspaceId,
+              thumbnail,
             );
 
             excalidrawAPI.setToast({

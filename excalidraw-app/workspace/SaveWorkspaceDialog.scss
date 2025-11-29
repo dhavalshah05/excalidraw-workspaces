@@ -1,0 +1,90 @@
+.SaveWorkspaceDialog {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  min-width: 320px;
+
+  &__field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+
+    label {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--text-primary-color);
+    }
+
+    input {
+      padding: 0.75rem 1rem;
+      border: 1px solid var(--input-border-color, #ddd);
+      border-radius: 0.5rem;
+      font-size: 1rem;
+      background: var(--input-bg-color, #fff);
+      color: var(--text-primary-color);
+      transition: border-color 0.2s, box-shadow 0.2s;
+
+      &:focus {
+        outline: none;
+        border-color: var(--color-primary, #6965db);
+        box-shadow: 0 0 0 3px rgba(105, 101, 219, 0.2);
+      }
+
+      &:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      &::placeholder {
+        color: var(--text-secondary-color, #999);
+      }
+    }
+  }
+
+  &__error {
+    font-size: 0.8rem;
+    color: var(--color-danger, #dc3545);
+    margin-top: 0.25rem;
+  }
+
+  &__actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: flex-end;
+  }
+
+  &__button {
+    padding: 0.625rem 1.25rem;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    &--cancel {
+      background: transparent;
+      border: 1px solid var(--input-border-color, #ddd);
+      color: var(--text-primary-color);
+
+      &:hover:not(:disabled) {
+        background: var(--button-hover-bg, rgba(0, 0, 0, 0.05));
+      }
+    }
+
+    &--save {
+      background: var(--color-primary, #6965db);
+      border: none;
+      color: #fff;
+
+      &:hover:not(:disabled) {
+        background: var(--color-primary-darker, #5753c9);
+      }
+    }
+  }
+}
+

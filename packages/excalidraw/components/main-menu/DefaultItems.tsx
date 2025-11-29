@@ -8,6 +8,7 @@ import {
   actionClearCanvas,
   actionLoadScene,
   actionSaveToActiveFile,
+  actionSaveFileToDisk,
   actionShortcuts,
   actionToggleSearchMenu,
   actionToggleTheme,
@@ -39,6 +40,7 @@ import {
   LoadIcon,
   MoonIcon,
   save,
+  saveAs,
   searchIcon,
   SunIcon,
   TrashIcon,
@@ -109,6 +111,27 @@ export const SaveToActiveFile = () => {
   );
 };
 SaveToActiveFile.displayName = "SaveToActiveFile";
+
+export const SaveAs = () => {
+  const { t } = useI18n();
+  const actionManager = useExcalidrawActionManager();
+
+  return (
+    <DropdownMenuItem
+      shortcut={getShortcutFromShortcutName("saveFileToDisk")}
+      data-testid="save-as-button"
+      onSelect={() => actionManager.executeAction(actionSaveFileToDisk)}
+      icon={saveAs}
+      aria-label={t("buttons.saveAs")}
+    >
+      {t("buttons.saveAs")}
+    </DropdownMenuItem>
+  );
+};
+SaveAs.displayName = "SaveAs";
+
+// Workspace-related menu items - these are implemented in excalidraw-app
+// and passed as custom components to work with the workspace storage system
 
 export const SaveAsImage = () => {
   const setAppState = useExcalidrawSetAppState();

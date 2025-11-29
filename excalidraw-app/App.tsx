@@ -80,6 +80,7 @@ import {
   useAtom,
   useAtomValue,
   useAtomWithInitialValue,
+  useSetAtom,
   appJotaiStore,
 } from "./app-jotai";
 import {
@@ -140,8 +141,16 @@ import "./index.scss";
 
 import { ExcalidrawPlusPromoBanner } from "./components/ExcalidrawPlusPromoBanner";
 import { AppSidebar } from "./components/AppSidebar";
+import {
+  SaveWorkspaceDialog,
+  WorkspaceManager,
+  WorkspaceIndicator,
+  currentWorkspaceIdAtom,
+  currentWorkspaceNameAtom,
+} from "./workspace";
 
 import type { CollabAPI } from "./collab/Collab";
+import type { SavedWorkspace } from "./data/WorkspaceStorage";
 
 polyfill();
 
@@ -378,6 +387,10 @@ const ExcalidrawWrapper = () => {
     return isCollaborationLink(window.location.href);
   });
   const collabError = useAtomValue(collabErrorIndicatorAtom);
+
+  // Workspace management
+  const setCurrentWorkspaceId = useSetAtom(currentWorkspaceIdAtom);
+  const setCurrentWorkspaceName = useSetAtom(currentWorkspaceNameAtom);
 
   useHandleLibrary({
     excalidrawAPI,
@@ -741,6 +754,49 @@ const ExcalidrawWrapper = () => {
     [setShareDialogState],
   );
 
+  // Workspace handlers
+  const handleNewWorkspace = useCallback(() => {
+    if (excalidrawAPI) {
+      excalidrawAPI.resetScene();
+      setCurrentWorkspaceId(null);
+      setCurrentWorkspaceName("");
+    }
+  }, [excalidrawAPI, setCurrentWorkspaceId, setCurrentWorkspaceName]);
+
+  const handleLoadWorkspace = useCallback(
+    (workspace: SavedWorkspace) => {
+      if (excalidrawAPI) {
+        // Merge workspace appState with current appState defaults
+        const mergedAppState = {
+          ...excalidrawAPI.getAppState(),
+          ...workspace.appState,
+        };
+        excalidrawAPI.updateScene({
+          elements: workspace.elements,
+          appState: mergedAppState,
+          captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+        });
+        if (workspace.files && Object.keys(workspace.files).length > 0) {
+          excalidrawAPI.addFiles(Object.values(workspace.files));
+        }
+        setCurrentWorkspaceId(workspace.id);
+        setCurrentWorkspaceName(workspace.name);
+      }
+    },
+    [excalidrawAPI, setCurrentWorkspaceId, setCurrentWorkspaceName],
+  );
+
+  const handleWorkspaceSaveSuccess = useCallback(
+    (workspaceId: string, name: string) => {
+      if (excalidrawAPI) {
+        excalidrawAPI.setToast({
+          message: `Workspace "${name}" saved successfully!`,
+        });
+      }
+    },
+    [excalidrawAPI],
+  );
+
   // browsers generally prevent infinite self-embedding, there are
   // cases where it still happens, and while we disallow self-embedding
   // by not whitelisting our own origin, this serves as an additional guard
@@ -851,12 +907,15 @@ const ExcalidrawWrapper = () => {
         autoFocus={true}
         theme={editorTheme}
         renderTopRightUI={(isMobile) => {
-          if (isMobile || !collabAPI || isCollabDisabled) {
+          if (isMobile) {
             return null;
           }
 
           return (
             <div className="excalidraw-ui-top-right">
+              {/* Workspace Indicator */}
+              <WorkspaceIndicator />
+
               {excalidrawAPI?.getEditorInterface().formFactor === "desktop" && (
                 <ExcalidrawPlusPromoBanner
                   isSignedIn={isExcalidrawPlusSignedUser}
@@ -864,13 +923,15 @@ const ExcalidrawWrapper = () => {
               )}
 
               {collabError.message && <CollabError collabError={collabError} />}
-              <LiveCollaborationTrigger
-                isCollaborating={isCollaborating}
-                onSelect={() =>
-                  setShareDialogState({ isOpen: true, type: "share" })
-                }
-                editorInterface={editorInterface}
-              />
+              {!isCollabDisabled && collabAPI && (
+                <LiveCollaborationTrigger
+                  isCollaborating={isCollaborating}
+                  onSelect={() =>
+                    setShareDialogState({ isOpen: true, type: "share" })
+                  }
+                  editorInterface={editorInterface}
+                />
+              )}
             </div>
           );
         }}
@@ -888,6 +949,7 @@ const ExcalidrawWrapper = () => {
           theme={appTheme}
           setTheme={(theme) => setAppTheme(theme)}
           refresh={() => forceRefresh((prev) => !prev)}
+          onNewWorkspace={handleNewWorkspace}
         />
         <AppWelcomeScreen
           onCollabDialogOpen={onCollabDialogOpen}
@@ -956,6 +1018,18 @@ const ExcalidrawWrapper = () => {
         />
 
         <AppSidebar />
+
+        {/* Workspace Management */}
+        <WorkspaceManager
+          onLoadWorkspace={handleLoadWorkspace}
+          onNewWorkspace={handleNewWorkspace}
+        />
+        {excalidrawAPI && (
+          <SaveWorkspaceDialog
+            excalidrawAPI={excalidrawAPI}
+            onSaveSuccess={handleWorkspaceSaveSuccess}
+          />
+        )}
 
         {errorMessage && (
           <ErrorDialog onClose={() => setErrorMessage("")}>

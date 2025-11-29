@@ -419,6 +419,8 @@ const ExcalidrawWrapper = () => {
           const mergedAppState = {
             ...excalidrawAPI.getAppState(),
             ...workspace.appState,
+            // Ensure loading state is cleared
+            isLoading: false,
           };
           excalidrawAPI.updateScene({
             elements: workspace.elements,

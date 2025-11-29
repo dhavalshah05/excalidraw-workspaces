@@ -2,7 +2,7 @@
  * Workspace Manager - Shows saved workspaces and allows loading/deleting them
  */
 
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { useAtom, useSetAtom } from "excalidraw-app/app-jotai";
 
 import { Dialog } from "@excalidraw/excalidraw/components/Dialog";
@@ -13,6 +13,8 @@ import {
   getAllWorkspacesMetadata,
   loadWorkspace,
   deleteWorkspace,
+  exportAllWorkspaces,
+  importWorkspaces,
 } from "../data/WorkspaceStorage";
 import {
   workspaceManagerOpenAtom,
@@ -40,6 +42,10 @@ export const WorkspaceManager: React.FC<WorkspaceManagerProps> = ({
   const setCurrentName = useSetAtom(currentWorkspaceNameAtom);
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importMessage, setImportMessage] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const refreshWorkspaces = useCallback(async () => {
     setIsLoading(true);
@@ -118,6 +124,64 @@ export const WorkspaceManager: React.FC<WorkspaceManagerProps> = ({
     setIsOpen(false);
   }, [onNewWorkspace, setIsOpen]);
 
+  const handleExport = useCallback(async () => {
+    setIsExporting(true);
+    setImportMessage(null);
+    try {
+      await exportAllWorkspaces();
+    } catch (err) {
+      console.error("Failed to export workspaces:", err);
+      alert(
+        err instanceof Error ? err.message : "Failed to export workspaces",
+      );
+    } finally {
+      setIsExporting(false);
+    }
+  }, []);
+
+  const handleImportClick = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const handleImportFile = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) {
+        return;
+      }
+
+      setIsImporting(true);
+      setImportMessage(null);
+
+      try {
+        const result = await importWorkspaces(file, false);
+
+        let message = `Imported ${result.imported} workspace(s).`;
+        if (result.skipped > 0) {
+          message += ` Skipped ${result.skipped} (already exist).`;
+        }
+        if (result.errors > 0) {
+          message += ` ${result.errors} error(s).`;
+        }
+
+        setImportMessage(message);
+        await refreshWorkspaces();
+      } catch (err) {
+        console.error("Failed to import workspaces:", err);
+        setImportMessage(
+          err instanceof Error ? err.message : "Failed to import workspaces",
+        );
+      } finally {
+        setIsImporting(false);
+        // Reset file input so same file can be selected again
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
+      }
+    },
+    [refreshWorkspaces],
+  );
+
   const formatDate = (timestamp: number) => {
     const date = new Date(timestamp);
     return date.toLocaleDateString(undefined, {
@@ -140,15 +204,45 @@ export const WorkspaceManager: React.FC<WorkspaceManagerProps> = ({
           <p className="WorkspaceManager__subtitle">
             Select a workspace to continue working, or create a new one.
           </p>
-          <button
-            type="button"
-            className="WorkspaceManager__newButton"
-            onClick={handleNewWorkspace}
-          >
-            <span className="WorkspaceManager__newIcon">+</span>
-            New Workspace
-          </button>
+          <div className="WorkspaceManager__headerActions">
+            <button
+              type="button"
+              className="WorkspaceManager__actionButton"
+              onClick={handleImportClick}
+              disabled={isImporting}
+              title="Import workspaces from file"
+            >
+              {isImporting ? "Importing..." : "Import"}
+            </button>
+            <button
+              type="button"
+              className="WorkspaceManager__actionButton"
+              onClick={handleExport}
+              disabled={isExporting || workspaces.length === 0}
+              title="Export all workspaces to file"
+            >
+              {isExporting ? "Exporting..." : "Export"}
+            </button>
+            <button
+              type="button"
+              className="WorkspaceManager__newButton"
+              onClick={handleNewWorkspace}
+            >
+              <span className="WorkspaceManager__newIcon">+</span>
+              New Workspace
+            </button>
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json"
+            onChange={handleImportFile}
+            style={{ display: "none" }}
+          />
         </div>
+        {importMessage && (
+          <div className="WorkspaceManager__importMessage">{importMessage}</div>
+        )}
 
         {isLoading ? (
           <div className="WorkspaceManager__loading">Loading workspaces...</div>

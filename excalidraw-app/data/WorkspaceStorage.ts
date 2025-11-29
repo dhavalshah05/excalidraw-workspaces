@@ -266,3 +266,181 @@ export const restoreCurrentWorkspace =
 
     return workspace;
   };
+
+// ============================================================================
+// Persistent Storage (Prevents Browser Auto-Eviction)
+// ============================================================================
+
+/**
+ * Request persistent storage to prevent browser from auto-deleting IndexedDB data.
+ * Returns true if granted, false if denied or not supported.
+ */
+export const requestPersistentStorage = async (): Promise<boolean> => {
+  if (navigator.storage && navigator.storage.persist) {
+    try {
+      const isPersisted = await navigator.storage.persist();
+      if (isPersisted) {
+        console.log("Persistent storage granted - data will not be auto-evicted");
+      } else {
+        console.log("Persistent storage denied - data may be evicted under storage pressure");
+      }
+      return isPersisted;
+    } catch (error) {
+      console.error("Failed to request persistent storage:", error);
+      return false;
+    }
+  }
+  console.log("Persistent storage API not supported");
+  return false;
+};
+
+/**
+ * Check if persistent storage is already granted
+ */
+export const isPersistentStorageGranted = async (): Promise<boolean> => {
+  if (navigator.storage && navigator.storage.persisted) {
+    try {
+      return await navigator.storage.persisted();
+    } catch (error) {
+      return false;
+    }
+  }
+  return false;
+};
+
+// ============================================================================
+// Export/Import Workspaces
+// ============================================================================
+
+export interface WorkspaceExportData {
+  version: number;
+  exportedAt: number;
+  workspaces: SavedWorkspace[];
+}
+
+const EXPORT_VERSION = 1;
+
+/**
+ * Export all workspaces to a JSON file
+ */
+export const exportAllWorkspaces = async (): Promise<void> => {
+  const workspaces = await getAllWorkspaces();
+
+  if (workspaces.length === 0) {
+    throw new Error("No workspaces to export");
+  }
+
+  const exportData: WorkspaceExportData = {
+    version: EXPORT_VERSION,
+    exportedAt: Date.now(),
+    workspaces,
+  };
+
+  const jsonString = JSON.stringify(exportData, null, 2);
+  const blob = new Blob([jsonString], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `excalidraw-workspaces-${new Date().toISOString().split("T")[0]}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
+
+export interface ImportResult {
+  imported: number;
+  skipped: number;
+  errors: number;
+  skippedNames: string[];
+}
+
+/**
+ * Import workspaces from a JSON file
+ * @param file - The file to import
+ * @param overwriteExisting - If true, overwrite workspaces with same name. If false, skip them.
+ */
+export const importWorkspaces = async (
+  file: File,
+  overwriteExisting: boolean = false,
+): Promise<ImportResult> => {
+  const result: ImportResult = {
+    imported: 0,
+    skipped: 0,
+    errors: 0,
+    skippedNames: [],
+  };
+
+  try {
+    const text = await file.text();
+    const data = JSON.parse(text) as WorkspaceExportData;
+
+    // Validate export format
+    if (!data.version || !data.workspaces || !Array.isArray(data.workspaces)) {
+      throw new Error("Invalid workspace export file format");
+    }
+
+    // Get existing workspaces to check for duplicates
+    const existingWorkspaces = await getAllWorkspacesMetadata();
+    const existingNames = new Map(
+      existingWorkspaces.map((ws) => [ws.name.toLowerCase(), ws.id]),
+    );
+
+    for (const workspace of data.workspaces) {
+      try {
+        const existingId = existingNames.get(workspace.name.toLowerCase());
+
+        if (existingId && !overwriteExisting) {
+          // Skip duplicate
+          result.skipped++;
+          result.skippedNames.push(workspace.name);
+          continue;
+        }
+
+        // Generate new ID for imported workspace (unless overwriting)
+        const newId = existingId && overwriteExisting ? existingId : generateId();
+
+        const importedWorkspace: SavedWorkspace = {
+          ...workspace,
+          id: newId,
+          // Preserve original timestamps but update if overwriting
+          updatedAt: overwriteExisting && existingId ? Date.now() : workspace.updatedAt,
+        };
+
+        await set(newId, importedWorkspace, workspacesStore);
+        result.imported++;
+      } catch (error) {
+        console.error(`Failed to import workspace "${workspace.name}":`, error);
+        result.errors++;
+      }
+    }
+
+    return result;
+  } catch (error) {
+    console.error("Failed to parse import file:", error);
+    throw new Error("Failed to parse import file. Please ensure it's a valid workspace export.");
+  }
+};
+
+/**
+ * Get storage usage information
+ */
+export const getStorageInfo = async (): Promise<{
+  used: number;
+  quota: number;
+  percentage: number;
+} | null> => {
+  if (navigator.storage && navigator.storage.estimate) {
+    try {
+      const estimate = await navigator.storage.estimate();
+      const used = estimate.usage || 0;
+      const quota = estimate.quota || 0;
+      const percentage = quota > 0 ? (used / quota) * 100 : 0;
+      return { used, quota, percentage };
+    } catch (error) {
+      return null;
+    }
+  }
+  return null;
+};

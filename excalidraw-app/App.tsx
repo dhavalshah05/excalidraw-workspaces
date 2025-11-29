@@ -153,6 +153,7 @@ import {
   setCurrentWorkspaceId as persistCurrentWorkspaceId,
   clearCurrentWorkspaceId,
   restoreCurrentWorkspace,
+  requestPersistentStorage,
 } from "./data/WorkspaceStorage";
 
 import type { CollabAPI } from "./collab/Collab";
@@ -382,6 +383,11 @@ const ExcalidrawWrapper = () => {
     setTimeout(() => {
       trackEvent("load", "version", getVersion());
     }, VERSION_TIMEOUT);
+  }, []);
+
+  // Request persistent storage to prevent browser from auto-evicting workspace data
+  useEffect(() => {
+    requestPersistentStorage();
   }, []);
 
   const [excalidrawAPI, excalidrawRefCallback] =

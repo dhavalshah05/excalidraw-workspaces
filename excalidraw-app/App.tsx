@@ -1,6 +1,5 @@
 import {
   Excalidraw,
-  LiveCollaborationTrigger,
   TTDDialogTrigger,
   CaptureUpdateAction,
   reconcileElements,
@@ -139,7 +138,6 @@ import { ExcalidrawPlusIframeExport } from "./ExcalidrawPlusIframeExport";
 
 import "./index.scss";
 
-import { ExcalidrawPlusPromoBanner } from "./components/ExcalidrawPlusPromoBanner";
 import { AppSidebar } from "./components/AppSidebar";
 import {
   SaveWorkspaceDialog,
@@ -916,22 +914,7 @@ const ExcalidrawWrapper = () => {
               {/* Workspace Indicator */}
               <WorkspaceIndicator />
 
-              {excalidrawAPI?.getEditorInterface().formFactor === "desktop" && (
-                <ExcalidrawPlusPromoBanner
-                  isSignedIn={isExcalidrawPlusSignedUser}
-                />
-              )}
-
               {collabError.message && <CollabError collabError={collabError} />}
-              {!isCollabDisabled && collabAPI && (
-                <LiveCollaborationTrigger
-                  isCollaborating={isCollaborating}
-                  onSelect={() =>
-                    setShareDialogState({ isOpen: true, type: "share" })
-                  }
-                  editorInterface={editorInterface}
-                />
-              )}
             </div>
           );
         }}
@@ -948,7 +931,6 @@ const ExcalidrawWrapper = () => {
           isCollabEnabled={!isCollabDisabled}
           theme={appTheme}
           setTheme={(theme) => setAppTheme(theme)}
-          refresh={() => forceRefresh((prev) => !prev)}
           onNewWorkspace={handleNewWorkspace}
         />
         <AppWelcomeScreen

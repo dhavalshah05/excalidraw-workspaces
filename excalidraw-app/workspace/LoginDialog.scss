@@ -1,0 +1,38 @@
+.LoginDialog {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-width: 320px;
+
+  &__text {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--text-primary-color);
+  }
+
+  &__button {
+    padding: 0.75rem 1.25rem;
+    border-radius: 0.5rem;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    background: var(--color-primary, #6965db);
+    border: none;
+    color: #fff;
+    transition: background 0.2s;
+
+    &:hover:not(:disabled) {
+      background: var(--color-primary-darker, #5753c9);
+    }
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+  }
+
+  &__error {
+    font-size: 0.8rem;
+    color: var(--color-danger, #dc3545);
+  }
+}

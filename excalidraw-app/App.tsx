@@ -3,7 +3,6 @@ import {
   TTDDialogTrigger,
   CaptureUpdateAction,
   reconcileElements,
-  useEditorInterface,
 } from "@excalidraw/excalidraw";
 import { trackEvent } from "@excalidraw/excalidraw/analytics";
 import { getDefaultAppState } from "@excalidraw/excalidraw/appState";
@@ -143,9 +142,14 @@ import {
   SaveWorkspaceDialog,
   WorkspaceManager,
   WorkspaceIndicator,
+  LoginDialog,
+  UserMenu,
   currentWorkspaceIdAtom,
   currentWorkspaceNameAtom,
   saveWorkspaceDialogOpenAtom,
+  currentUserAtom,
+  authLoadingAtom,
+  loginDialogOpenAtom,
 } from "./workspace";
 import {
   saveWorkspace,
@@ -153,8 +157,8 @@ import {
   setCurrentWorkspaceId as persistCurrentWorkspaceId,
   clearCurrentWorkspaceId,
   restoreCurrentWorkspace,
-  requestPersistentStorage,
 } from "./data/WorkspaceStorage";
+import { getCurrentUser, onAuthChange } from "./data/auth";
 
 import type { CollabAPI } from "./collab/Collab";
 import type { SavedWorkspace } from "./data/WorkspaceStorage";
@@ -362,8 +366,6 @@ const ExcalidrawWrapper = () => {
 
   const [langCode, setLangCode] = useAppLangCode();
 
-  const editorInterface = useEditorInterface();
-
   // initial state
   // ---------------------------------------------------------------------------
 
@@ -385,10 +387,17 @@ const ExcalidrawWrapper = () => {
     }, VERSION_TIMEOUT);
   }, []);
 
-  // Request persistent storage to prevent browser from auto-evicting workspace data
+  // Login state: check once on start, then follow every change (login/logout)
+  const [currentUser, setCurrentUser] = useAtom(currentUserAtom);
+  const [isAuthLoading, setIsAuthLoading] = useAtom(authLoadingAtom);
+  const setLoginDialogOpen = useSetAtom(loginDialogOpenAtom);
   useEffect(() => {
-    requestPersistentStorage();
-  }, []);
+    getCurrentUser()
+      .then(setCurrentUser)
+      .finally(() => setIsAuthLoading(false));
+    const stopListening = onAuthChange(setCurrentUser);
+    return stopListening;
+  }, [setCurrentUser, setIsAuthLoading]);
 
   const [excalidrawAPI, excalidrawRefCallback] =
     useCallbackRefState<ExcalidrawImperativeAPI>();
@@ -409,11 +418,14 @@ const ExcalidrawWrapper = () => {
   );
   const setSaveDialogOpen = useSetAtom(saveWorkspaceDialogOpenAtom);
 
-  // Restore current workspace from localStorage on app initialization
+  // Restore current workspace on app initialization.
+  // Waits until we know whether the user is logged in; only runs when they are.
   const workspaceRestoredRef = useRef(false);
   useEffect(() => {
-    // Only run once when excalidrawAPI becomes available
     if (!excalidrawAPI || workspaceRestoredRef.current) {
+      return;
+    }
+    if (isAuthLoading || !currentUser) {
       return;
     }
 
@@ -448,7 +460,13 @@ const ExcalidrawWrapper = () => {
 
     workspaceRestoredRef.current = true;
     restoreWorkspace();
-  }, [excalidrawAPI, setCurrentWorkspaceId, setCurrentWorkspaceName]);
+  }, [
+    excalidrawAPI,
+    isAuthLoading,
+    currentUser,
+    setCurrentWorkspaceId,
+    setCurrentWorkspaceName,
+  ]);
 
   // Handle Cmd+S / Ctrl+S for workspace saving
   useEffect(() => {
@@ -465,6 +483,11 @@ const ExcalidrawWrapper = () => {
           return;
         }
 
+        if (!currentUser) {
+          setLoginDialogOpen(true);
+          return;
+        }
+
         // If workspace already exists, save directly
         if (currentWorkspaceId && currentWorkspaceName) {
           try {
@@ -473,7 +496,11 @@ const ExcalidrawWrapper = () => {
             const files = excalidrawAPI.getFiles();
 
             // Generate thumbnail
-            const thumbnail = await generateThumbnail(elements, appState, files);
+            const thumbnail = await generateThumbnail(
+              elements,
+              appState,
+              files,
+            );
 
             await saveWorkspace(
               currentWorkspaceName,
@@ -508,9 +535,11 @@ const ExcalidrawWrapper = () => {
     };
   }, [
     excalidrawAPI,
+    currentUser,
     currentWorkspaceId,
     currentWorkspaceName,
     setSaveDialogOpen,
+    setLoginDialogOpen,
   ]);
 
   useHandleLibrary({
@@ -1040,6 +1069,7 @@ const ExcalidrawWrapper = () => {
             <div className="excalidraw-ui-top-right">
               {/* Workspace Indicator */}
               <WorkspaceIndicator />
+              <UserMenu />
 
               {collabError.message && <CollabError collabError={collabError} />}
             </div>
@@ -1129,6 +1159,7 @@ const ExcalidrawWrapper = () => {
         <AppSidebar />
 
         {/* Workspace Management */}
+        <LoginDialog />
         <WorkspaceManager
           onLoadWorkspace={handleLoadWorkspace}
           onNewWorkspace={handleNewWorkspace}

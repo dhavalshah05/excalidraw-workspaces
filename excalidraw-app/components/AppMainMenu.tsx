@@ -1,5 +1,4 @@
 import React from "react";
-import { useSetAtom } from "../app-jotai";
 
 import {
   PlusIcon,
@@ -11,10 +10,13 @@ import { MainMenu } from "@excalidraw/excalidraw/index";
 
 import type { Theme } from "@excalidraw/element/types";
 
+import { useSetAtom } from "../app-jotai";
+
 import {
   workspaceManagerOpenAtom,
   saveWorkspaceDialogOpenAtom,
 } from "../workspace";
+import { useRequireLogin } from "../workspace/useRequireLogin";
 
 export const AppMainMenu: React.FC<{
   onCollabDialogOpen: () => any;
@@ -26,6 +28,7 @@ export const AppMainMenu: React.FC<{
 }> = React.memo((props) => {
   const setWorkspaceManagerOpen = useSetAtom(workspaceManagerOpenAtom);
   const setSaveDialogOpen = useSetAtom(saveWorkspaceDialogOpenAtom);
+  const requireLogin = useRequireLogin();
 
   return (
     <MainMenu>
@@ -40,7 +43,7 @@ export const AppMainMenu: React.FC<{
       </DropdownMenuItem>
       <DropdownMenuItem
         icon={save}
-        onSelect={() => setSaveDialogOpen(true)}
+        onSelect={() => requireLogin(() => setSaveDialogOpen(true))}
         data-testid="save-workspace-button"
         aria-label="Save Workspace"
       >
@@ -48,7 +51,7 @@ export const AppMainMenu: React.FC<{
       </DropdownMenuItem>
       <DropdownMenuItem
         icon={LoadIcon}
-        onSelect={() => setWorkspaceManagerOpen(true)}
+        onSelect={() => requireLogin(() => setWorkspaceManagerOpen(true))}
         data-testid="open-workspaces-button"
         aria-label="My Workspaces"
       >

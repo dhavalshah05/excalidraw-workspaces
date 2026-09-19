@@ -140,6 +140,8 @@ export default defineConfig(({ mode }) => {
         },
 
         workbox: {
+          // main bundle grew past the 2 MiB default after adding @supabase/supabase-js
+          maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
           // don't precache fonts, locales and separate chunks
           globIgnores: [
             "fonts.css",

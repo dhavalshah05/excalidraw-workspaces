@@ -10,6 +10,7 @@ import {
   currentWorkspaceIdAtom,
   workspaceManagerOpenAtom,
 } from "./workspaceState";
+import { useRequireLogin } from "./useRequireLogin";
 
 import "./WorkspaceIndicator.scss";
 
@@ -17,6 +18,7 @@ export const WorkspaceIndicator: React.FC = () => {
   const currentName = useAtomValue(currentWorkspaceNameAtom);
   const currentId = useAtomValue(currentWorkspaceIdAtom);
   const setManagerOpen = useSetAtom(workspaceManagerOpenAtom);
+  const requireLogin = useRequireLogin();
 
   const displayName = currentName || "Untitled Workspace";
   const isUnsaved = !currentId;
@@ -25,7 +27,7 @@ export const WorkspaceIndicator: React.FC = () => {
     <button
       type="button"
       className="WorkspaceIndicator"
-      onClick={() => setManagerOpen(true)}
+      onClick={() => requireLogin(() => setManagerOpen(true))}
       title={
         isUnsaved
           ? "Click to open workspace manager"

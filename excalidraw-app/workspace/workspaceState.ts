@@ -4,7 +4,17 @@
 
 import { atom } from "excalidraw-app/app-jotai";
 
+import type { AuthUser } from "../data/auth";
 import type { WorkspaceMetadata } from "../data/WorkspaceStorage";
+
+// Logged-in user (null means logged out)
+export const currentUserAtom = atom<AuthUser | null>(null);
+
+// True until the first login check finishes on app start
+export const authLoadingAtom = atom<boolean>(true);
+
+// Whether the login dialog is open
+export const loginDialogOpenAtom = atom<boolean>(false);
 
 // Current active workspace ID (null means unsaved/new workspace)
 export const currentWorkspaceIdAtom = atom<string | null>(null);

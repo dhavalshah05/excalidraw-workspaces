@@ -1,20 +1,24 @@
 /**
- * This file manages workspace storage using IndexedDB.
+ * This file manages workspace storage in Supabase.
  * It allows users to save, load, and manage multiple Excalidraw scenes/workspaces.
+ * The user must be logged in; every row belongs to one user (enforced by RLS).
  */
-
-import { createStore, del, entries, get, set } from "idb-keyval";
 
 import { getNonDeletedElements } from "@excalidraw/element";
 import { clearAppStateForLocalStorage } from "@excalidraw/excalidraw/appState";
 import { exportToCanvas } from "@excalidraw/utils";
 
-import { STORAGE_KEYS } from "../app_constants";
-
 import type { ExcalidrawElement } from "@excalidraw/element/types";
+
 import type { AppState, BinaryFiles } from "@excalidraw/excalidraw/types";
 
+import { STORAGE_KEYS } from "../app_constants";
+
+import { getCurrentUser } from "./auth";
+import { getSupabase } from "./supabase";
+
 const THUMBNAIL_MAX_SIZE = 200; // Max width/height for thumbnail
+const TABLE = "workspaces";
 
 export interface SavedWorkspace {
   id: string;
@@ -36,10 +40,69 @@ export interface WorkspaceMetadata {
   thumbnail?: string; // Base64 encoded thumbnail
 }
 
-const workspacesStore = createStore(
-  "excalidraw-workspaces-db",
-  "workspaces-store",
-);
+// ============================================================================
+// Database row shape and mappers
+// ============================================================================
+
+interface WorkspaceData {
+  elements: readonly ExcalidrawElement[];
+  appState: Partial<AppState>;
+  files: BinaryFiles;
+}
+
+interface WorkspaceRow {
+  id: string;
+  user_id: string;
+  name: string;
+  data: WorkspaceData;
+  thumbnail: string | null;
+  element_count: number;
+  created_at: number;
+  updated_at: number;
+}
+
+type WorkspaceMetadataRow = Omit<WorkspaceRow, "data" | "user_id">;
+
+const rowToWorkspace = (row: WorkspaceRow): SavedWorkspace => ({
+  id: row.id,
+  name: row.name,
+  elements: row.data.elements,
+  appState: row.data.appState,
+  files: row.data.files,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+  thumbnail: row.thumbnail ?? undefined,
+});
+
+const rowToMetadata = (row: WorkspaceMetadataRow): WorkspaceMetadata => ({
+  id: row.id,
+  name: row.name,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+  elementCount: row.element_count,
+  thumbnail: row.thumbnail ?? undefined,
+});
+
+const workspaceToRow = (
+  workspace: SavedWorkspace,
+  userId: string,
+): WorkspaceRow => ({
+  id: workspace.id,
+  user_id: userId,
+  name: workspace.name,
+  data: {
+    elements: workspace.elements,
+    appState: workspace.appState,
+    files: workspace.files,
+  },
+  thumbnail: workspace.thumbnail ?? null,
+  element_count: workspace.elements.length,
+  created_at: workspace.createdAt,
+  updated_at: workspace.updatedAt,
+});
+
+const METADATA_COLUMNS =
+  "id, name, thumbnail, element_count, created_at, updated_at";
 
 /**
  * Generate a unique ID for a workspace
@@ -48,8 +111,33 @@ const generateId = (): string => {
   return `ws_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
 };
 
+const requireUserId = async (): Promise<string> => {
+  const user = await getCurrentUser();
+  if (!user) {
+    throw new Error("You must be logged in to use workspaces");
+  }
+  return user.id;
+};
+
 /**
- * Save a workspace to IndexedDB
+ * Write a full workspace row (insert or update).
+ */
+const upsertWorkspace = async (workspace: SavedWorkspace): Promise<void> => {
+  const userId = await requireUserId();
+  const { error } = await getSupabase()
+    .from(TABLE)
+    .upsert(workspaceToRow(workspace, userId));
+  if (error) {
+    throw error;
+  }
+};
+
+// ============================================================================
+// Public API
+// ============================================================================
+
+/**
+ * Save a workspace to Supabase
  */
 export const saveWorkspace = async (
   name: string,
@@ -66,7 +154,7 @@ export const saveWorkspace = async (
   let createdAt = now;
   let existingThumbnail: string | undefined;
   if (existingId) {
-    const existing = await get<SavedWorkspace>(existingId, workspacesStore);
+    const existing = await loadWorkspace(existingId);
     if (existing) {
       createdAt = existing.createdAt;
       existingThumbnail = existing.thumbnail;
@@ -87,23 +175,30 @@ export const saveWorkspace = async (
     thumbnail: thumbnail || existingThumbnail,
   };
 
-  await set(id, workspace, workspacesStore);
+  await upsertWorkspace(workspace);
 
   return workspace;
 };
 
 /**
- * Load a workspace from IndexedDB
+ * Load a workspace from Supabase
  */
 export const loadWorkspace = async (
   id: string,
 ): Promise<SavedWorkspace | null> => {
-  const workspace = await get<SavedWorkspace>(id, workspacesStore);
-  return workspace || null;
+  const { data, error } = await getSupabase()
+    .from(TABLE)
+    .select("*")
+    .eq("id", id)
+    .maybeSingle<WorkspaceRow>();
+  if (error) {
+    throw error;
+  }
+  return data ? rowToWorkspace(data) : null;
 };
 
 /**
- * Delete a workspace from IndexedDB
+ * Delete a workspace from Supabase
  * Also clears the current workspace ID if we're deleting the current workspace
  */
 export const deleteWorkspace = async (id: string): Promise<void> => {
@@ -113,38 +208,43 @@ export const deleteWorkspace = async (id: string): Promise<void> => {
     clearCurrentWorkspaceId();
   }
 
-  await del(id, workspacesStore);
+  const { error } = await getSupabase().from(TABLE).delete().eq("id", id);
+  if (error) {
+    throw error;
+  }
 };
 
 /**
- * Get all workspaces metadata (for listing in the UI)
+ * Get all workspaces metadata (for listing in the UI).
+ * Does not download the drawing data, so the list stays fast.
  */
 export const getAllWorkspacesMetadata = async (): Promise<
   WorkspaceMetadata[]
 > => {
-  const allEntries = await entries<string, SavedWorkspace>(workspacesStore);
-
-  return allEntries
-    .map(([_, workspace]) => ({
-      id: workspace.id,
-      name: workspace.name,
-      createdAt: workspace.createdAt,
-      updatedAt: workspace.updatedAt,
-      elementCount: workspace.elements.length,
-      thumbnail: workspace.thumbnail,
-    }))
-    .sort((a, b) => b.updatedAt - a.updatedAt); // Most recently updated first
+  const { data, error } = await getSupabase()
+    .from(TABLE)
+    .select(METADATA_COLUMNS)
+    .order("updated_at", { ascending: false })
+    .returns<WorkspaceMetadataRow[]>();
+  if (error) {
+    throw error;
+  }
+  return (data ?? []).map(rowToMetadata);
 };
 
 /**
  * Get all workspaces (full data)
  */
 export const getAllWorkspaces = async (): Promise<SavedWorkspace[]> => {
-  const allEntries = await entries<string, SavedWorkspace>(workspacesStore);
-
-  return allEntries
-    .map(([_, workspace]) => workspace)
-    .sort((a, b) => b.updatedAt - a.updatedAt);
+  const { data, error } = await getSupabase()
+    .from(TABLE)
+    .select("*")
+    .order("updated_at", { ascending: false })
+    .returns<WorkspaceRow[]>();
+  if (error) {
+    throw error;
+  }
+  return (data ?? []).map(rowToWorkspace);
 };
 
 /**
@@ -154,10 +254,15 @@ export const workspaceNameExists = async (
   name: string,
   excludeId?: string,
 ): Promise<boolean> => {
-  const allWorkspaces = await getAllWorkspacesMetadata();
-  return allWorkspaces.some(
-    (ws) => ws.name === name && ws.id !== excludeId,
-  );
+  let query = getSupabase().from(TABLE).select("id").eq("name", name);
+  if (excludeId) {
+    query = query.neq("id", excludeId);
+  }
+  const { data, error } = await query.limit(1);
+  if (error) {
+    throw error;
+  }
+  return (data ?? []).length > 0;
 };
 
 /**
@@ -167,11 +272,12 @@ export const renameWorkspace = async (
   id: string,
   newName: string,
 ): Promise<void> => {
-  const workspace = await get<SavedWorkspace>(id, workspacesStore);
-  if (workspace) {
-    workspace.name = newName;
-    workspace.updatedAt = Date.now();
-    await set(id, workspace, workspacesStore);
+  const { error } = await getSupabase()
+    .from(TABLE)
+    .update({ name: newName, updated_at: Date.now() })
+    .eq("id", id);
+  if (error) {
+    throw error;
   }
 };
 
@@ -212,6 +318,7 @@ export const generateThumbnail = async (
 
 // ============================================================================
 // Current Workspace Persistence (localStorage)
+// Which workspace was open last is a per-device preference, so it stays local.
 // ============================================================================
 
 /**
@@ -268,47 +375,6 @@ export const restoreCurrentWorkspace =
   };
 
 // ============================================================================
-// Persistent Storage (Prevents Browser Auto-Eviction)
-// ============================================================================
-
-/**
- * Request persistent storage to prevent browser from auto-deleting IndexedDB data.
- * Returns true if granted, false if denied or not supported.
- */
-export const requestPersistentStorage = async (): Promise<boolean> => {
-  if (navigator.storage && navigator.storage.persist) {
-    try {
-      const isPersisted = await navigator.storage.persist();
-      if (isPersisted) {
-        console.log("Persistent storage granted - data will not be auto-evicted");
-      } else {
-        console.log("Persistent storage denied - data may be evicted under storage pressure");
-      }
-      return isPersisted;
-    } catch (error) {
-      console.error("Failed to request persistent storage:", error);
-      return false;
-    }
-  }
-  console.log("Persistent storage API not supported");
-  return false;
-};
-
-/**
- * Check if persistent storage is already granted
- */
-export const isPersistentStorageGranted = async (): Promise<boolean> => {
-  if (navigator.storage && navigator.storage.persisted) {
-    try {
-      return await navigator.storage.persisted();
-    } catch (error) {
-      return false;
-    }
-  }
-  return false;
-};
-
-// ============================================================================
 // Export/Import Workspaces
 // ============================================================================
 
@@ -324,9 +390,7 @@ const EXPORT_VERSION = 1;
  * Export all workspaces to a JSON file
  * @param filename - Optional custom filename (without extension)
  */
-export const exportAllWorkspaces = async (
-  filename?: string,
-): Promise<void> => {
+export const exportAllWorkspaces = async (filename?: string): Promise<void> => {
   const workspaces = await getAllWorkspaces();
 
   if (workspaces.length === 0) {
@@ -344,7 +408,9 @@ export const exportAllWorkspaces = async (
   const url = URL.createObjectURL(blob);
 
   // Use provided filename or default
-  const defaultFilename = `excalidraw-workspaces-${new Date().toISOString().split("T")[0]}`;
+  const defaultFilename = `excalidraw-workspaces-${
+    new Date().toISOString().split("T")[0]
+  }`;
   const finalFilename = filename?.trim() || defaultFilename;
 
   const a = document.createElement("a");
@@ -406,16 +472,18 @@ export const importWorkspaces = async (
         }
 
         // Generate new ID for imported workspace (unless overwriting)
-        const newId = existingId && overwriteExisting ? existingId : generateId();
+        const newId =
+          existingId && overwriteExisting ? existingId : generateId();
 
         const importedWorkspace: SavedWorkspace = {
           ...workspace,
           id: newId,
           // Preserve original timestamps but update if overwriting
-          updatedAt: overwriteExisting && existingId ? Date.now() : workspace.updatedAt,
+          updatedAt:
+            overwriteExisting && existingId ? Date.now() : workspace.updatedAt,
         };
 
-        await set(newId, importedWorkspace, workspacesStore);
+        await upsertWorkspace(importedWorkspace);
         result.imported++;
       } catch (error) {
         console.error(`Failed to import workspace "${workspace.name}":`, error);
@@ -426,28 +494,8 @@ export const importWorkspaces = async (
     return result;
   } catch (error) {
     console.error("Failed to parse import file:", error);
-    throw new Error("Failed to parse import file. Please ensure it's a valid workspace export.");
+    throw new Error(
+      "Failed to parse import file. Please ensure it's a valid workspace export.",
+    );
   }
-};
-
-/**
- * Get storage usage information
- */
-export const getStorageInfo = async (): Promise<{
-  used: number;
-  quota: number;
-  percentage: number;
-} | null> => {
-  if (navigator.storage && navigator.storage.estimate) {
-    try {
-      const estimate = await navigator.storage.estimate();
-      const used = estimate.usage || 0;
-      const quota = estimate.quota || 0;
-      const percentage = quota > 0 ? (used / quota) * 100 : 0;
-      return { used, quota, percentage };
-    } catch (error) {
-      return null;
-    }
-  }
-  return null;
 };

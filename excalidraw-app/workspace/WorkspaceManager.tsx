@@ -7,8 +7,6 @@ import { useAtom, useSetAtom } from "excalidraw-app/app-jotai";
 
 import { Dialog } from "@excalidraw/excalidraw/components/Dialog";
 
-import type { SavedWorkspace } from "../data/WorkspaceStorage";
-
 import {
   getAllWorkspacesMetadata,
   loadWorkspace,
@@ -16,6 +14,7 @@ import {
   exportAllWorkspaces,
   importWorkspaces,
 } from "../data/WorkspaceStorage";
+
 import {
   workspaceManagerOpenAtom,
   workspacesListAtom,
@@ -25,6 +24,8 @@ import {
 } from "./workspaceState";
 
 import "./WorkspaceManager.scss";
+
+import type { SavedWorkspace } from "../data/WorkspaceStorage";
 
 interface WorkspaceManagerProps {
   onLoadWorkspace: (workspace: SavedWorkspace) => void;
@@ -47,7 +48,12 @@ export const WorkspaceManager: React.FC<WorkspaceManagerProps> = ({
   const [importMessage, setImportMessage] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<
-    "updated-desc" | "updated-asc" | "name-asc" | "name-desc" | "created-desc" | "created-asc"
+    | "updated-desc"
+    | "updated-asc"
+    | "name-asc"
+    | "name-desc"
+    | "created-desc"
+    | "created-asc"
   >("updated-desc");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -159,7 +165,9 @@ export const WorkspaceManager: React.FC<WorkspaceManagerProps> = ({
   }, [onNewWorkspace, setIsOpen]);
 
   const handleExport = useCallback(async () => {
-    const defaultFilename = `excalidraw-workspaces-${new Date().toISOString().split("T")[0]}`;
+    const defaultFilename = `excalidraw-workspaces-${
+      new Date().toISOString().split("T")[0]
+    }`;
     const filename = prompt("Enter filename for export:", defaultFilename);
 
     // User cancelled
@@ -173,9 +181,7 @@ export const WorkspaceManager: React.FC<WorkspaceManagerProps> = ({
       await exportAllWorkspaces(filename);
     } catch (err) {
       console.error("Failed to export workspaces:", err);
-      alert(
-        err instanceof Error ? err.message : "Failed to export workspaces",
-      );
+      alert(err instanceof Error ? err.message : "Failed to export workspaces");
     } finally {
       setIsExporting(false);
     }

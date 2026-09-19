@@ -15,6 +15,7 @@ import {
   generateThumbnail,
   setCurrentWorkspaceId as persistCurrentWorkspaceId,
 } from "../data/WorkspaceStorage";
+
 import {
   saveWorkspaceDialogOpenAtom,
   currentWorkspaceIdAtom,

@@ -214,6 +214,7 @@ export type InteractiveCanvasAppState = Readonly<
   _CommonCanvasAppState & {
     // renderInteractiveScene
     activeEmbeddable: AppState["activeEmbeddable"];
+    activeTool: AppState["activeTool"];
     selectionElement: AppState["selectionElement"];
     selectedGroupIds: AppState["selectedGroupIds"];
     selectedLinearElement: AppState["selectedLinearElement"];
@@ -770,6 +771,9 @@ export type PointerDownState = Readonly<{
   // original element frozen snapshots so we can access the original
   // element attribute values at time of pointerdown
   originalElements: Map<string, NonDeleted<ExcalidrawElement>>;
+  connection: {
+    sourceElementId: ExcalidrawElement["id"] | null;
+  };
   resize: {
     // Handle when resizing, might change during the pointer interaction
     handleType: MaybeTransformHandleType;

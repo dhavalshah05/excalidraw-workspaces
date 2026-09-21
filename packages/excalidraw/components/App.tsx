@@ -113,6 +113,8 @@ import {
 
 import {
   getObservedAppState,
+  canHaveConnectionHandles,
+  getConnectionHandleAtPoint,
   getCommonBounds,
   getElementAbsoluteCoords,
   bindOrUnbindBindingElements,
@@ -242,6 +244,7 @@ import {
   type ApplyToOptions,
   positionElementsOnGrid,
   calculateFixedPointForNonElbowArrowBinding,
+  bindBindingElement,
   bindOrUnbindBindingElement,
   mutateElement,
   getElementBounds,
@@ -6592,6 +6595,14 @@ class App extends React.Component<AppProps, AppState> {
       !isOverScrollBar &&
       !this.state.selectedLinearElement?.isEditing
     ) {
+      const connectionHandle = this.getSelectedConnectionHandleAtPoint(
+        pointFrom<GlobalPoint>(scenePointerX, scenePointerY),
+      );
+      if (connectionHandle && event.pointerType === "mouse") {
+        setCursor(this.interactiveCanvas, CURSOR_TYPE.POINTER);
+        return;
+      }
+
       // for linear elements, we'd like to prioritize point dragging over edge resizing
       // therefore, we update and check hovered point index first
       if (this.state.selectedLinearElement) {
@@ -6921,6 +6932,36 @@ class App extends React.Component<AppProps, AppState> {
     }
   }
 
+  private getSelectedConnectionHandleAtPoint = (point: GlobalPoint) => {
+    if (
+      this.editorInterface.formFactor !== "desktop" ||
+      !isSelectionLikeTool(this.state.activeTool.type) ||
+      this.state.viewModeEnabled ||
+      this.state.editingTextElement ||
+      this.state.croppingElementId ||
+      this.state.newElement
+    ) {
+      return null;
+    }
+
+    const selectedElements = this.scene.getSelectedElements(this.state);
+    if (
+      selectedElements.length !== 1 ||
+      !canHaveConnectionHandles(selectedElements[0])
+    ) {
+      return null;
+    }
+
+    const handle = getConnectionHandleAtPoint(
+      selectedElements[0],
+      point,
+      this.state.zoom,
+      this.scene.getNonDeletedElementsMap(),
+    );
+
+    return handle ? selectedElements[0] : null;
+  };
+
   private handleCanvasPointerDown = (
     event: React.PointerEvent<HTMLElement>,
   ) => {
@@ -7143,11 +7184,34 @@ class App extends React.Component<AppProps, AppState> {
       return;
     }
 
-    this.clearSelectionIfNotUsingSelection();
-    this.updateBindingEnabledOnPointerMove(event);
+    const connectionSource =
+      event.pointerType !== "mouse"
+        ? null
+        : this.getSelectedConnectionHandleAtPoint(
+            pointFrom<GlobalPoint>(
+              pointerDownState.origin.x,
+              pointerDownState.origin.y,
+            ),
+          );
 
-    if (this.handleSelectionOnPointerDown(event, pointerDownState)) {
-      return;
+    if (connectionSource) {
+      pointerDownState.connection.sourceElementId = connectionSource.id;
+      flushSync(() => {
+        this.setState({ isBindingEnabled: true });
+      });
+      this.handleLinearElementOnPointerDown(
+        event,
+        "arrow",
+        pointerDownState,
+        connectionSource,
+      );
+    } else {
+      this.clearSelectionIfNotUsingSelection();
+      this.updateBindingEnabledOnPointerMove(event);
+
+      if (this.handleSelectionOnPointerDown(event, pointerDownState)) {
+        return;
+      }
     }
 
     const allowOnPointerDown =
@@ -7162,7 +7226,9 @@ class App extends React.Component<AppProps, AppState> {
       return;
     }
 
-    if (this.state.activeTool.type === "lasso") {
+    if (connectionSource) {
+      // The arrow was already created from the connection handle.
+    } else if (this.state.activeTool.type === "lasso") {
       const hitSelectedElement =
         pointerDownState.hit.element &&
         this.isASelectedElement(pointerDownState.hit.element);
@@ -7619,6 +7685,9 @@ class App extends React.Component<AppProps, AppState> {
     return {
       origin,
       withCmdOrCtrl: event[KEYS.CTRL_OR_CMD],
+      connection: {
+        sourceElementId: null,
+      },
       originInGrid: tupleToCoors(
         getGridPoint(
           origin.x,
@@ -8414,8 +8483,9 @@ class App extends React.Component<AppProps, AppState> {
     event: React.PointerEvent<HTMLElement>,
     elementType: ExcalidrawLinearElement["type"],
     pointerDownState: PointerDownState,
+    connectionSource?: NonDeleted<ExcalidrawBindableElement>,
   ): void => {
-    if (event.ctrlKey) {
+    if (event.ctrlKey && !connectionSource) {
       flushSync(() => {
         this.setState({ isBindingEnabled: false });
       });
@@ -8537,6 +8607,12 @@ class App extends React.Component<AppProps, AppState> {
           ? [currentItemStartArrowhead, currentItemEndArrowhead]
           : [null, null];
 
+      // Arrows dragged from a connection handle are always elbow arrows,
+      // matching the Ctrl+Arrow flowchart feature.
+      const arrowType = connectionSource
+        ? ARROW_TYPE.elbow
+        : this.state.currentItemArrowType;
+
       const element =
         elementType === "arrow"
           ? newArrowElement({
@@ -8551,7 +8627,7 @@ class App extends React.Component<AppProps, AppState> {
               roughness: this.state.currentItemRoughness,
               opacity: this.state.currentItemOpacity,
               roundness:
-                this.state.currentItemArrowType === ARROW_TYPE.round
+                arrowType === ARROW_TYPE.round
                   ? { type: ROUNDNESS.PROPORTIONAL_RADIUS }
                   : // note, roundness doesn't have any effect for elbow arrows,
                     // but it's best to set it to null as well
@@ -8560,11 +8636,8 @@ class App extends React.Component<AppProps, AppState> {
               endArrowhead,
               locked: false,
               frameId: topLayerFrame ? topLayerFrame.id : null,
-              elbowed: this.state.currentItemArrowType === ARROW_TYPE.elbow,
-              fixedSegments:
-                this.state.currentItemArrowType === ARROW_TYPE.elbow
-                  ? []
-                  : null,
+              elbowed: arrowType === ARROW_TYPE.elbow,
+              fixedSegments: arrowType === ARROW_TYPE.elbow ? [] : null,
             })
           : newLinearElement({
               type: elementType,
@@ -8591,7 +8664,8 @@ class App extends React.Component<AppProps, AppState> {
       );
       const elementsMap = this.scene.getNonDeletedElementsMap();
       const boundElement = isBindingEnabled(this.state)
-        ? getHoveredElementForBinding(
+        ? connectionSource ||
+          getHoveredElementForBinding(
             point,
             this.scene.getNonDeletedElements(),
             elementsMap,
@@ -8605,22 +8679,33 @@ class App extends React.Component<AppProps, AppState> {
       this.scene.insertElement(element);
 
       if (isBindingElement(element)) {
-        // Do the initial binding so the binding strategy has the initial state
-        bindOrUnbindBindingElement(
-          element,
-          new Map([
-            [
-              0,
-              {
-                point: pointFrom<LocalPoint>(0, 0),
-                isDragging: false,
-              },
-            ],
-          ]),
-          this.scene,
-          this.state,
-          { newArrow: true, altKey: event.altKey, initialBinding: true },
-        );
+        if (connectionSource) {
+          bindBindingElement(
+            element,
+            connectionSource,
+            "orbit",
+            "start",
+            this.scene,
+            point,
+          );
+        } else {
+          // Do the initial binding so the binding strategy has the initial state
+          bindOrUnbindBindingElement(
+            element,
+            new Map([
+              [
+                0,
+                {
+                  point: pointFrom<LocalPoint>(0, 0),
+                  isDragging: false,
+                },
+              ],
+            ]),
+            this.scene,
+            this.state,
+            { newArrow: true, altKey: event.altKey, initialBinding: true },
+          );
+        }
       }
 
       // NOTE: We need the flushSync here for the
@@ -9727,6 +9812,56 @@ class App extends React.Component<AppProps, AppState> {
     return false;
   }
 
+  private getConnectionTargetElement = () => {
+    // While dragging a new arrow, the binding pipeline only sets
+    // `suggestedBinding` (the highlighted element); `endBinding` is committed
+    // later by actionFinalize. Use the same source as the highlight.
+    const suggested = this.state.suggestedBinding;
+    if (!suggested) {
+      return null;
+    }
+    return this.scene.getNonDeletedElementsMap().get(suggested.id) ?? null;
+  };
+
+  private cancelConnectionArrow = (
+    arrow: NonDeleted<ExcalidrawArrowElement>,
+    sourceElementId: ExcalidrawElement["id"],
+  ) => {
+    const elementsMap = this.scene.getNonDeletedElementsMap();
+    for (const binding of [arrow.startBinding, arrow.endBinding]) {
+      const boundElement = binding && elementsMap.get(binding.elementId);
+      if (isBindableElement(boundElement)) {
+        this.scene.mutateElement(boundElement, {
+          boundElements:
+            boundElement.boundElements?.filter(
+              (element) => element.id !== arrow.id,
+            ) || null,
+        });
+      }
+    }
+
+    const sourceElement = elementsMap.get(sourceElementId);
+
+    this.updateScene({
+      elements: this.scene
+        .getElementsIncludingDeleted()
+        .filter((element) => element.id !== arrow.id),
+      appState: {
+        newElement: null,
+        multiElement: null,
+        selectedLinearElement: null,
+        startBoundElement: null,
+        suggestedBinding: null,
+        selectedElementIds: makeNextSelectedElementIds(
+          sourceElement ? { [sourceElement.id]: true } : {},
+          this.state,
+        ),
+      },
+      captureUpdate: CaptureUpdateAction.NEVER,
+    });
+    resetCursor(this.interactiveCanvas);
+  };
+
   private onPointerUpFromPointerDownHandler(
     pointerDownState: PointerDownState,
   ): (event: PointerEvent) => void {
@@ -9783,6 +9918,7 @@ class App extends React.Component<AppProps, AppState> {
 
       if (
         this.state.activeTool.type === "selection" &&
+        !pointerDownState.connection.sourceElementId &&
         !pointerDownState.boxSelection.hasOccurred &&
         !pointerDownState.resize.isResizing &&
         !hitElements.some((el) => this.state.selectedElementIds[el.id])
@@ -9946,6 +10082,23 @@ class App extends React.Component<AppProps, AppState> {
         childEvent,
       );
 
+      const connectionSourceId = pointerDownState.connection.sourceElementId;
+      if (connectionSourceId && isBindingElement(newElement)) {
+        // Trust the binding computed while dragging so the drop rule matches
+        // the target highlight the user saw.
+        const targetElement = this.getConnectionTargetElement();
+        const hasValidTarget =
+          pointerDownState.drag.hasOccurred &&
+          targetElement &&
+          targetElement.id !== connectionSourceId &&
+          isFlowchartNodeElement(targetElement);
+
+        if (!hasValidTarget) {
+          this.cancelConnectionArrow(newElement, connectionSourceId);
+          return;
+        }
+      }
+
       if (newElement?.type === "freedraw") {
         const pointerCoords = viewportCoordsToSceneCoords(
           childEvent,
@@ -9998,6 +10151,7 @@ class App extends React.Component<AppProps, AppState> {
         if (
           (!pointerDownState.drag.hasOccurred ||
             dragDistance < MINIMUM_ARROW_SIZE) &&
+          !pointerDownState.connection.sourceElementId &&
           newElement &&
           !multiElement
         ) {

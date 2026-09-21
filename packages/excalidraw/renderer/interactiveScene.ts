@@ -15,6 +15,7 @@ import {
   FRAME_STYLE,
   getFeatureFlag,
   invariant,
+  isSelectionLikeTool,
   THEME,
 } from "@excalidraw/common";
 
@@ -22,6 +23,8 @@ import {
   deconstructDiamondElement,
   deconstructRectanguloidElement,
   elementCenterPoint,
+  canHaveConnectionHandles,
+  getConnectionHandles,
   getOmitSidesForEditorInterface,
   getTransformHandles,
   getTransformHandlesFromCoords,
@@ -47,6 +50,7 @@ import {
 import { getCommonBounds, getElementAbsoluteCoords } from "@excalidraw/element";
 
 import type {
+  ConnectionHandles,
   TransformHandles,
   TransformHandleType,
 } from "@excalidraw/element";
@@ -982,6 +986,58 @@ const renderTransformHandles = (
   });
 };
 
+const renderConnectionHandles = (
+  context: CanvasRenderingContext2D,
+  appState: InteractiveCanvasAppState,
+  connectionHandles: ConnectionHandles,
+  selectionColor: string,
+  elementAngle: number,
+) => {
+  const directions = ["n", "e", "s", "w"] as const;
+  const directionAngles = {
+    n: -Math.PI / 2,
+    e: 0,
+    s: Math.PI / 2,
+    w: Math.PI,
+  };
+
+  context.save();
+  context.lineWidth = 1.5 / appState.zoom.value;
+  context.strokeStyle = selectionColor;
+  context.fillStyle = oc.white;
+
+  for (const direction of directions) {
+    const { bounds } = connectionHandles[direction];
+    const [x, y, width, height] = bounds;
+    const centerX = x + width / 2;
+    const centerY = y + height / 2;
+    const radius = width / 2;
+
+    context.beginPath();
+    context.arc(centerX, centerY, radius, 0, Math.PI * 2);
+    context.fill();
+    context.stroke();
+
+    context.save();
+    context.translate(centerX, centerY);
+    context.rotate(directionAngles[direction] + elementAngle);
+    const lineStart = -3 / appState.zoom.value;
+    const lineEnd = 3 / appState.zoom.value;
+    const arrowSize = 2 / appState.zoom.value;
+
+    context.beginPath();
+    context.moveTo(lineStart, 0);
+    context.lineTo(lineEnd, 0);
+    context.moveTo(lineEnd - arrowSize, -arrowSize);
+    context.lineTo(lineEnd, 0);
+    context.lineTo(lineEnd - arrowSize, arrowSize);
+    context.stroke();
+    context.restore();
+  }
+
+  context.restore();
+};
+
 const renderCropHandles = (
   context: CanvasRenderingContext2D,
   renderConfig: InteractiveCanvasRenderConfig,
@@ -1451,6 +1507,24 @@ const _renderInteractiveScene = ({
           transformHandles,
           selectedElements[0].angle,
         );
+
+        if (
+          editorInterface.formFactor === "desktop" &&
+          isSelectionLikeTool(appState.activeTool.type) &&
+          canHaveConnectionHandles(selectedElements[0])
+        ) {
+          renderConnectionHandles(
+            context,
+            appState,
+            getConnectionHandles(
+              selectedElements[0],
+              appState.zoom,
+              elementsMap,
+            ),
+            selectionColor,
+            selectedElements[0].angle,
+          );
+        }
       }
 
       if (appState.croppingElementId && !appState.isCropping) {

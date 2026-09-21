@@ -12,7 +12,7 @@ export interface FontMetadata {
   /** for head & hhea metrics read the woff2 with https://fontdrop.info/ */
   metrics: {
     /** head.unitsPerEm metric */
-    unitsPerEm: 1000 | 1024 | 2048;
+    unitsPerEm: number;
     /** hhea.ascender metric */
     ascender: number;
     /** hhea.descender metric */
@@ -62,6 +62,14 @@ export const FONT_METADATA: Record<number, FontMetadata> = {
       unitsPerEm: 1000,
       ascender: 750,
       descender: -250,
+      lineHeight: 1.25,
+    },
+  },
+  [FONT_FAMILY["Fira Code"]]: {
+    metrics: {
+      unitsPerEm: 1950,
+      ascender: 1800,
+      descender: -600,
       lineHeight: 1.25,
     },
   },

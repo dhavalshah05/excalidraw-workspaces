@@ -34,7 +34,7 @@ export const DEFAULT_FONTS = [
     testId: "font-family-normal",
   },
   {
-    value: FONT_FAMILY["Comic Shanns"],
+    value: FONT_FAMILY["Fira Code"],
     icon: FontFamilyCodeIcon,
     text: t("labels.code"),
     testId: "font-family-code",

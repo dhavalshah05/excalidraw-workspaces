@@ -561,10 +561,10 @@ exports[`<Excalidraw/> > Test UIOptions prop > Test canvasActions > should rende
       style="height: 1px; margin: .5rem 0px; flex: 0 0 auto;"
     />
     <button
-      aria-label="Dark mode"
+      aria-label="Light mode"
       class="dropdown-menu-item dropdown-menu-item-base"
       data-testid="toggle-dark-mode"
-      title="Dark mode"
+      title="Light mode"
     >
       <div
         class="dropdown-menu-item__icon"
@@ -578,13 +578,17 @@ exports[`<Excalidraw/> > Test UIOptions prop > Test canvasActions > should rende
           stroke="currentColor"
           stroke-linecap="round"
           stroke-linejoin="round"
+          stroke-width="1.5"
           viewBox="0 0 20 20"
         >
-          <path
-            clip-rule="evenodd"
-            d="M10 2.5h.328a6.25 6.25 0 0 0 6.6 10.372A7.5 7.5 0 1 1 10 2.493V2.5Z"
+          <g
             stroke="currentColor"
-          />
+            stroke-linejoin="round"
+          >
+            <path
+              d="M10 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM10 4.167V2.5M14.167 5.833l1.166-1.166M15.833 10H17.5M14.167 14.167l1.166 1.166M10 15.833V17.5M5.833 14.167l-1.166 1.166M5 10H3.333M5.833 5.833 4.667 4.667"
+            />
+          </g>
         </svg>
       </div>
       <div
@@ -593,7 +597,7 @@ exports[`<Excalidraw/> > Test UIOptions prop > Test canvasActions > should rende
         <span
           style="text-overflow: ellipsis; overflow: hidden; white-space: nowrap;"
         >
-          Dark mode
+          Light mode
         </span>
       </div>
       <div
@@ -624,7 +628,7 @@ exports[`<Excalidraw/> > Test UIOptions prop > Test canvasActions > should rende
               class="color-picker__top-picks"
             >
               <button
-                class="color-picker__button active has-outline"
+                class="color-picker__button has-outline"
                 data-testid="color-top-pick-#ffffff"
                 style="--swatch-color: #ffffff;"
                 title="#ffffff"
@@ -646,7 +650,7 @@ exports[`<Excalidraw/> > Test UIOptions prop > Test canvasActions > should rende
                 />
               </button>
               <button
-                class="color-picker__button has-outline"
+                class="color-picker__button active has-outline"
                 data-testid="color-top-pick-#f5faff"
                 style="--swatch-color: #f5faff;"
                 title="#f5faff"
@@ -690,7 +694,7 @@ exports[`<Excalidraw/> > Test UIOptions prop > Test canvasActions > should rende
               class="color-picker__button active-color properties-trigger has-outline"
               data-openpopup="canvasBackground"
               data-state="closed"
-              style="--swatch-color: #ffffff;"
+              style="--swatch-color: #f5faff;"
               title="Show background color picker"
               type="button"
             >

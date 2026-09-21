@@ -186,7 +186,8 @@ export type ExcalidrawGenericElement =
 export type ExcalidrawFlowchartNodeElement =
   | ExcalidrawRectangleElement
   | ExcalidrawDiamondElement
-  | ExcalidrawEllipseElement;
+  | ExcalidrawEllipseElement
+  | ExcalidrawTextElement;
 
 export type ExcalidrawRectanguloidElement =
   | ExcalidrawRectangleElement

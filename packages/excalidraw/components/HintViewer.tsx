@@ -230,6 +230,17 @@ const getHints = ({
 
         return bindTextToElement;
       }
+      if (
+        !appState.newElement &&
+        !appState.selectedElementsAreBeingDragged &&
+        !appState.editingTextElement &&
+        isTextElement(selectedElements[0]) &&
+        isFlowchartNodeElement(selectedElements[0])
+      ) {
+        return t("hints.createFlowchart", {
+          shortcut: getTaggedShortcutKey(["CtrlOrCmd", "↑↓"]),
+        });
+      }
     }
   }
 

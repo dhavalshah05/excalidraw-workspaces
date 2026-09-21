@@ -20,7 +20,7 @@ import {
 } from "./heading";
 import { LinearElementEditor } from "./linearElementEditor";
 import { mutateElement } from "./mutateElement";
-import { newArrowElement, newElement } from "./newElement";
+import { newArrowElement, newElement, newTextElement } from "./newElement";
 import { aabbForElement } from "./bounds";
 import { elementsAreInFrameBounds, elementOverlapsWithFrame } from "./frame";
 import {
@@ -34,6 +34,7 @@ import {
   type ExcalidrawBindableElement,
   type ExcalidrawElement,
   type ExcalidrawFlowchartNodeElement,
+  type ExcalidrawTextElement,
   type NonDeletedSceneElementsMap,
   type Ordered,
   type OrderedExcalidrawElement,
@@ -45,6 +46,87 @@ type LinkDirection = "up" | "right" | "down" | "left";
 
 const VERTICAL_OFFSET = 100;
 const HORIZONTAL_OFFSET = 100;
+const NEW_TEXT_NODE_PLACEHOLDER = "Text";
+
+const getSharedNodeStyle = (sourceNode: ExcalidrawFlowchartNodeElement) => {
+  return {
+    roundness: sourceNode.roundness,
+    roughness: sourceNode.roughness,
+    backgroundColor: sourceNode.backgroundColor,
+    strokeColor: sourceNode.strokeColor,
+    strokeWidth: sourceNode.strokeWidth,
+    opacity: sourceNode.opacity,
+    fillStyle: sourceNode.fillStyle,
+    strokeStyle: sourceNode.strokeStyle,
+  };
+};
+
+type FlowchartShapeNodeElement = Exclude<
+  ExcalidrawFlowchartNodeElement,
+  ExcalidrawTextElement
+>;
+
+const createNextShapeNode = (
+  sourceNode: FlowchartShapeNodeElement,
+  x: number,
+  y: number,
+): FlowchartShapeNodeElement => {
+  const shapeNode = newElement({
+    type: sourceNode.type,
+    x,
+    y,
+    width: sourceNode.width,
+    height: sourceNode.height,
+    ...getSharedNodeStyle(sourceNode),
+  });
+
+  invariant(
+    isFlowchartNodeElement(shapeNode),
+    "not an ExcalidrawFlowchartNodeElement",
+  );
+
+  return shapeNode as FlowchartShapeNodeElement;
+};
+
+const createNextTextNode = (
+  sourceNode: ExcalidrawTextElement,
+  x: number,
+  y: number,
+) => {
+  // newTextElement shifts x/y by alignment offsets, so pass
+  // "left"/"top" to keep the top-left corner at the requested position
+  const textNode = newTextElement({
+    text: NEW_TEXT_NODE_PLACEHOLDER,
+    x,
+    y,
+    fontSize: sourceNode.fontSize,
+    fontFamily: sourceNode.fontFamily,
+    lineHeight: sourceNode.lineHeight,
+    textAlign: "left",
+    verticalAlign: "top",
+    autoResize: sourceNode.autoResize,
+    ...getSharedNodeStyle(sourceNode),
+  });
+
+  return {
+    ...textNode,
+    textAlign: sourceNode.textAlign,
+    verticalAlign: sourceNode.verticalAlign,
+  };
+};
+
+const createNextNode = (
+  sourceNode: ExcalidrawFlowchartNodeElement,
+  x: number,
+  y: number,
+): ExcalidrawFlowchartNodeElement => {
+  switch (sourceNode.type) {
+    case "text":
+      return createNextTextNode(sourceNode, x, y);
+    default:
+      return createNextShapeNode(sourceNode, x, y);
+  }
+};
 
 export const getLinkDirectionFromKey = (key: string): LinkDirection => {
   switch (key) {
@@ -253,26 +335,10 @@ const addNewNode = (
     direction,
   );
 
-  const nextNode = newElement({
-    type: element.type,
-    x: element.x + offsets.x,
-    y: element.y + offsets.y,
-    // TODO: extract this to a util
-    width: element.width,
-    height: element.height,
-    roundness: element.roundness,
-    roughness: element.roughness,
-    backgroundColor: element.backgroundColor,
-    strokeColor: element.strokeColor,
-    strokeWidth: element.strokeWidth,
-    opacity: element.opacity,
-    fillStyle: element.fillStyle,
-    strokeStyle: element.strokeStyle,
-  });
-
-  invariant(
-    isFlowchartNodeElement(nextNode),
-    "not an ExcalidrawFlowchartNodeElement",
+  const nextNode = createNextNode(
+    element,
+    element.x + offsets.x,
+    element.y + offsets.y,
   );
 
   const bindingArrow = createBindingArrow(
@@ -331,27 +397,7 @@ export const addNewNodes = (
       nextX = startX + offsetX;
     }
 
-    const nextNode = newElement({
-      type: startNode.type,
-      x: nextX,
-      y: nextY,
-      // TODO: extract this to a util
-      width: startNode.width,
-      height: startNode.height,
-      roundness: startNode.roundness,
-      roughness: startNode.roughness,
-      backgroundColor: startNode.backgroundColor,
-      strokeColor: startNode.strokeColor,
-      strokeWidth: startNode.strokeWidth,
-      opacity: startNode.opacity,
-      fillStyle: startNode.fillStyle,
-      strokeStyle: startNode.strokeStyle,
-    });
-
-    invariant(
-      isFlowchartNodeElement(nextNode),
-      "not an ExcalidrawFlowchartNodeElement",
-    );
+    const nextNode = createNextNode(startNode, nextX, nextY);
 
     const bindingArrow = createBindingArrow(
       startNode,

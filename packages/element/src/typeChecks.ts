@@ -275,6 +275,11 @@ export const isExcalidrawElement = (
 export const isFlowchartNodeElement = (
   element: ExcalidrawElement,
 ): element is ExcalidrawFlowchartNodeElement => {
+  if (element.type === "text") {
+    // text bound inside a container is selected via its container
+    return !element.containerId;
+  }
+
   return (
     element.type === "rectangle" ||
     element.type === "ellipse" ||
